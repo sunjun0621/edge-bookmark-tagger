@@ -68,25 +68,38 @@
   .cp-row { display: flex; gap: 8px; align-items: center; margin: 8px 0 0; }
   .cp-row > span { flex: 1; font-size: 13px; }
 
-  /* 类别一览 */
+  /* 类别一览：按文件夹分组 + chip，点 chip 弹菜单（不再用每行一个原生下拉，那个又卡又难找） */
   .cat-only { flex: 0 0 auto; margin: 0; align-items: center; gap: 5px; }
   .cat-only span { font-size: 12px; color: var(--muted); white-space: nowrap; }
-  .cat-list { max-height: 300px; overflow-y: auto; margin-top: 8px;
-              border: 1px solid var(--line); border-radius: 8px; }
-  .cat-list:empty { display: none; }
-  .cat-item { display: flex; gap: 8px; align-items: center; padding: 7px 10px;
-              border-bottom: 1px solid var(--line); font-size: 13px; }
-  .cat-item:last-child { border-bottom: 0; }
-  .cat-item:hover { background: var(--bg); }
-  .cat-item .c-name { flex: 0 0 auto; min-width: 74px; font-weight: 500; }
-  .cat-item .c-sel { flex: 1; min-width: 0; }
-  .cat-item .c-sel select { padding: 4px 8px; font-size: 12.5px; padding-right: 22px; }
-  .cat-item .c-rules { flex: 0 0 auto; font-size: 11px; color: var(--faint); white-space: nowrap; }
-  .cat-item .c-tag { flex: 0 0 auto; font-size: 10.5px; padding: 1px 6px; border-radius: 8px;
-                     background: var(--bg); color: var(--faint); border: 1px solid var(--line); }
-  .cat-item .c-tag.mine { color: var(--accent); border-color: var(--accent); }
-  .cat-item button { padding: 3px 8px; font-size: 11.5px; }
+  .cat-groups { max-height: 320px; overflow-y: auto; margin-top: 8px; padding-right: 2px; }
+  .cat-groups:empty { display: none; }
+  .cat-group { margin: 0 0 12px; }
+  .cat-group-h { font-size: 12px; color: var(--muted); margin: 0 0 6px; }
+  .cat-group-h b { color: var(--fg); font-weight: 600; }
+  .cat-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .cat-chip { padding: 3px 11px; font-size: 12.5px; border: 1px solid var(--line); border-radius: 12px;
+              background: var(--card); color: var(--fg); cursor: pointer; flex: 0 0 auto; }
+  .cat-chip:hover { border-color: var(--accent); color: var(--accent); }
+  .cat-chip.mine { border-color: var(--accent); color: var(--accent); background: var(--bg); }
   .cat-empty { padding: 18px; text-align: center; color: var(--faint); font-size: 12.5px; }
+
+  /* 点击类别后弹出的操作浮层（挂在 body 上，不会被滚动区裁掉） */
+  .cat-pop { position: fixed; z-index: 60; min-width: 208px; padding: 10px;
+             background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+             box-shadow: 0 10px 28px rgba(0,0,0,.16); display: none; }
+  .cat-pop.on { display: block; }
+  .cat-pop .p-name { font-size: 13px; font-weight: 600; }
+  .cat-pop .p-sub { font-size: 11px; color: var(--faint); margin: 1px 0 8px; }
+  .cat-pop .p-h { font-size: 11px; color: var(--faint); margin: 0 0 4px; }
+  .cat-pop .p-folder { display: block; width: 100%; text-align: left; padding: 6px 8px; margin: 1px 0;
+                       font-size: 12.5px; background: transparent; border: 0; border-radius: 6px;
+                       color: var(--fg); cursor: pointer; }
+  .cat-pop .p-folder:hover { background: var(--bg); }
+  .cat-pop .p-folder.cur { color: var(--accent); font-weight: 600; background: var(--bg); }
+  .cat-pop .p-del { display: block; width: 100%; margin-top: 8px; padding: 6px 8px; font-size: 12.5px;
+                    background: transparent; border: 1px solid var(--line); border-radius: 6px;
+                    color: var(--danger); cursor: pointer; }
+  .cat-pop .p-del:hover { border-color: var(--danger); }
 
   /* 规则编辑 */
   .rule-bar { display: flex; gap: 8px; align-items: center; margin: 4px 0 2px; }
@@ -189,8 +202,8 @@
     <button class="primary" id="catAdd">新增</button>
   </div>
   <div class="err" id="catErr"></div>
-  <div class="cat-list" id="catList"></div>
-  <div class="hint" style="margin-top:8px">删除只影响以后的归类，已有书签不会动。自带类别不能删，但可以换文件夹。</div>
+  <div class="cat-groups" id="catList"></div>
+  <div class="hint" style="margin-top:8px">点一下类别就能移动或删除；删除只影响以后的归类，已有书签不会动。</div>
 </section>
 
 <section class="card">

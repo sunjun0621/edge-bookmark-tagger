@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "书签自动归类 · 【前缀】名称｜关键词",
-  "version": "1.8.0",
+  "version": "1.0.1",
   "description": "收藏即自动改名为【类别】名称｜用途关键词，并平铺归入一级文件夹（默认 工作｜学习 / 生活｜娱乐 / 技术｜工具 / 其他｜归档，可在设置页增删）。",
   "permissions": [
     "bookmarks",

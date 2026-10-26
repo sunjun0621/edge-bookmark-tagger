@@ -11,8 +11,11 @@ const DEFAULT_CFG = {
   dedupe: true
 };
 
+// 只取需要的键：get(null) 会把几十 KB 的规则补丁也拖出来，而大部分消息用不到
+const CFG_KEYS = ['enabled', 'useai', 'aibase', 'aimodel', 'apikey', 'unknown', 'dedupe'];
+
 async function cfg() {
-  const s = await chrome.storage.local.get(null);
+  const s = await chrome.storage.local.get(CFG_KEYS);
   return Object.assign({}, DEFAULT_CFG, s);
 }
 
@@ -38,6 +41,7 @@ async function savePatch(p) {
 }
 
 // 启动：载入自定义前缀 / 文件夹配置 / 规则补丁 → 迁移旧文件夹名
+// 书签树只读一次：迁移与文件夹缓存共用，冷启动少一趟全树遍历
 let ready = (async () => {
   try {
     const s = await chrome.storage.local.get(['customPrefix', 'folders', 'rulesPatch']);
@@ -46,12 +50,14 @@ let ready = (async () => {
     else await saveFolders();          // 首次：把出厂四个文件夹落盘
     rebuildPrefixMap();
     if (s.rulesPatch) applyRulesPatch(s.rulesPatch);
-    await migrateFolderNames();
+    const tree = await chrome.bookmarks.getTree();
+    folderCache = { at: Date.now(), map: mapFolderIdsFromTree(tree) };
+    await migrateFolderNames(tree);
   } catch (e) { console.warn('初始化失败', e); }
 })();
 
 // 判定 + 去重 + 改名 + 移动（Ctrl+D 走这条）
-async function applyTo(nodeId, url, title, c) {
+async function applyTo(nodeId, url, title, c, node) {
   c = c || (await cfg());
   let r = await classify(title, url, c);
 
@@ -67,7 +73,7 @@ async function applyTo(nodeId, url, title, c) {
     try { await chrome.bookmarks.update(nodeId, { title: newTitle }); } catch (e) { console.warn(e); }
   }
 
-  const folderName = await moveToFolder(nodeId, r.prefix);
+  const folderName = await moveToFolder(nodeId, r.prefix, null, node);
   return { title: newTitle, folder: folderName, source: r.source };
 }
 
@@ -110,7 +116,7 @@ chrome.bookmarks.onCreated.addListener(async (id, node) => {
   if (isFormatted(node.title || '')) return;
   const c = await cfg();
   if (!c.enabled) return;
-  try { await applyTo(id, node.url, node.title, c); } catch (e) { console.warn('applyTo 失败', e); }
+  try { await applyTo(id, node.url, node.title, c, node); } catch (e) { console.warn('applyTo 失败', e); }
 });
 
 // 文件夹被增删改后刷新缓存
@@ -121,7 +127,9 @@ chrome.bookmarks.onCreated.addListener(async (id, node) => {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     await ready;
-    const c = await cfg();
+    // 配置只在真正需要的消息里才读（十几类消息根本用不到，全量读一次得不偿失）
+    const needCfg = ['preview', 'suggest', 'apply', 'aiTest'].includes(msg.type);
+    const c = needCfg ? await cfg() : null;
     switch (msg.type) {
       case 'preview': {
         const r = await classify(msg.title, msg.url, c);

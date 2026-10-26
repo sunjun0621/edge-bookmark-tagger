@@ -99,6 +99,8 @@ $('impFile').addEventListener('change', async () => {
 });
 
 // ── 类别一览（查询 / 新增 / 删除 / 换文件夹）─────────
+// 按文件夹分组、类别显示成 chip；点 chip 弹操作浮层。
+// 旧版每行挂一个原生 select，五十多个类别就是五十多个重量级控件，搜索一敲全销毁重建——又卡又难找。
 let CATS = [];
 
 async function loadCats() {
@@ -116,64 +118,133 @@ function renderCats() {
   if (q) items = items.filter(x => x.name.toLowerCase().includes(q));
 
   box.innerHTML = '';
-  if (!items.length) {
+  const frag = document.createDocumentFragment();
+
+  // 按文件夹分组，组序跟随文件夹配置；自己的类别在组内排前面
+  const byFolder = {};
+  for (const x of items) (byFolder[x.folder] = byFolder[x.folder] || []).push(x);
+  const order = FOLDER_LIST.map(f => f.name);
+  const groups = order.filter(n => byFolder[n]).map(n => [n, byFolder[n]]);
+  for (const n in byFolder) if (order.indexOf(n) < 0) groups.push([n, byFolder[n]]);
+
+  if (!groups.length) {
     const d = el('div', 'cat-empty',
       q ? '没有匹配的类别' : (onlyMine ? '你还没有自己加过类别' : '还没有类别'));
-    box.appendChild(d);
+    frag.appendChild(d);
+    box.appendChild(frag);
     return;
   }
-  // 自己加的排前面，方便查看管理
-  const sorted = items.slice().sort((a, b) => (a.builtin === b.builtin) ? 0 : (a.builtin ? 1 : -1));
-  for (const x of sorted) {
-    const row = el('div', 'cat-item');
 
-    const name = el('span', 'c-name', x.name);
-    const tag = el('span', 'c-tag' + (x.builtin ? '' : ' mine'), x.builtin ? '自带' : '我的');
-
-    // 文件夹选择：改完立即生效，等于「移动」
-    const sel = el('select', 'c-sel');
-    for (const f of FOLDER_LIST) {
-      const o = el('option', null, f.name);
-      o.value = f.name;
-      sel.appendChild(o);
+  for (const [folder, arr] of groups) {
+    const g = el('div', 'cat-group');
+    const h = el('div', 'cat-group-h');
+    h.appendChild(el('b', null, folder));
+    h.appendChild(el('span', null, '　' + arr.length + ' 个'));
+    const chips = el('div', 'cat-chips');
+    arr.sort((a, b) => (a.builtin === b.builtin) ? 0 : (a.builtin ? 1 : -1));
+    for (const x of arr) {
+      const chip = el('button', 'cat-chip' + (x.builtin ? '' : ' mine'), x.name);
+      chip.type = 'button';
+      chip.dataset.cat = x.name;
+      chip.title = '点击移动或删除';
+      chip.addEventListener('click', () => toggleCatPop(x, chip));
+      chips.appendChild(chip);
     }
-    sel.value = x.folder;
-    sel.title = '放进哪个文件夹';
-    sel.addEventListener('change', async () => {
-      const r = await chrome.runtime.sendMessage({ type: 'catMove', name: x.name, folder: sel.value });
-      if (!r || !r.ok) { $('catErr').textContent = (r && r.msg) || '移动失败'; sel.value = x.folder; return; }
+    g.appendChild(h);
+    g.appendChild(chips);
+    frag.appendChild(g);
+  }
+  box.appendChild(frag);
+}
+
+// ── 类别操作浮层 ────────────────────────────
+let catPopFor = null;   // 当前浮层对应的类别
+let catPopAnchor = null;
+
+function closeCatPop() {
+  const pop = document.getElementById('catPop');
+  if (pop) pop.remove();
+  catPopFor = null;
+  catPopAnchor = null;
+}
+
+function toggleCatPop(x, anchor) {
+  if (catPopFor && catPopFor.name === x.name && catPopAnchor === anchor) { closeCatPop(); return; }
+  closeCatPop();
+  catPopFor = x;
+  catPopAnchor = anchor;
+
+  const pop = el('div', 'cat-pop');
+  pop.id = 'catPop';
+
+  pop.appendChild(el('div', 'p-name', x.name));
+  const sub = x.builtin ? '自带类别' : '我加的类别' + (x.rules ? ' · ' + x.rules + ' 条规则在用' : ' · 暂无规则在用');
+  pop.appendChild(el('div', 'p-sub', sub));
+
+  pop.appendChild(el('div', 'p-h', '移动到'));
+  for (const f of FOLDER_LIST) {
+    const b = el('button', 'p-folder' + (f.name === x.folder ? ' cur' : ''), f.name);
+    b.type = 'button';
+    if (f.name === x.folder) b.disabled = true;
+    b.addEventListener('click', async () => {
+      const r = await chrome.runtime.sendMessage({ type: 'catMove', name: x.name, folder: f.name });
+      closeCatPop();
+      if (!r || !r.ok) { $('catErr').textContent = (r && r.msg) || '移动失败'; return; }
       $('catErr').className = 'err ok';
-      $('catErr').textContent = '「' + x.name + '」已移到「' + sel.value + '」';
+      $('catErr').textContent = '「' + x.name + '」已移到「' + f.name + '」';
       await loadCats();
       await loadFolders();
     });
-
-    const rules = el('span', 'c-rules', x.rules ? x.rules + ' 条规则' : '');
-
-    row.appendChild(name);
-    row.appendChild(tag);
-    row.appendChild(sel);
-    row.appendChild(rules);
-
-    if (!x.builtin) {
-      const del = el('button', 'ghost', '删');
-      del.type = 'button';
-      del.addEventListener('click', async () => {
-        if (!confirm('删除类别「' + x.name + '」？\n\n以后不会再归到这个类别，已有书签不受影响。')) return;
-        const r = await chrome.runtime.sendMessage({ type: 'catDel', name: x.name });
-        if (!r || !r.ok) { $('catErr').textContent = (r && r.msg) || '删除失败'; return; }
-        $('catErr').className = 'err ok';
-        $('catErr').textContent = '已删除「' + x.name + '」';
-        await loadCats();
-        await loadFolders();
-      });
-      row.appendChild(del);
-    }
-    box.appendChild(row);
+    pop.appendChild(b);
   }
+
+  if (!x.builtin) {
+    const d = el('button', 'p-del', '删除这个类别');
+    d.type = 'button';
+    d.addEventListener('click', async () => {
+      if (!confirm('删除类别「' + x.name + '」？\n\n以后不会再归到这个类别，已有书签不受影响。')) return;
+      const r = await chrome.runtime.sendMessage({ type: 'catDel', name: x.name });
+      closeCatPop();
+      if (!r || !r.ok) { $('catErr').textContent = (r && r.msg) || '删除失败'; return; }
+      $('catErr').className = 'err ok';
+      $('catErr').textContent = '已删除「' + x.name + '」';
+      await loadCats();
+      await loadFolders();
+    });
+    pop.appendChild(d);
+  }
+
+  document.body.appendChild(pop);
+  // 定位：贴着 chip 下方；贴不下就翻到上方；左右不超出窗口
+  const r = anchor.getBoundingClientRect();
+  pop.style.visibility = 'hidden';
+  pop.classList.add('on');
+  const pw = pop.offsetWidth, ph = pop.offsetHeight;
+  let left = Math.max(8, Math.min(r.left, window.innerWidth - pw - 12));
+  let top = r.bottom + 6;
+  if (top + ph > window.innerHeight - 8) top = r.top - ph - 6;
+  pop.style.left = left + 'px';
+  pop.style.top = Math.max(8, top) + 'px';
+  pop.style.visibility = '';
 }
 
-$('catSearch').addEventListener('input', renderCats);
+// 点浮层外面、按 Esc、滚动列表时都收起
+document.addEventListener('mousedown', e => {
+  if (!catPopFor) return;
+  if (e.target.id === 'catPop' || (e.target.closest && e.target.closest('#catPop'))) return;
+  if (e.target.closest && e.target.closest('.cat-chip')) return;
+  closeCatPop();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && catPopFor) closeCatPop(); });
+document.getElementById('catList').addEventListener('scroll', () => { if (catPopFor) closeCatPop(); });
+
+// 搜索框防抖：类别与规则都有几百条，每敲一个键就全量重建 DOM 会卡
+function debounce(fn, wait) {
+  let t;
+  return function () { clearTimeout(t); t = setTimeout(fn, wait); };
+}
+const renderCatsSoon = debounce(renderCats, 120);
+$('catSearch').addEventListener('input', renderCatsSoon);
 $('catOnlyMine').addEventListener('change', renderCats);
 
 $('catAdd').addEventListener('click', async () => {
@@ -323,11 +394,13 @@ function renderRules() {
     : all;
 
   list.innerHTML = '';
+  const frag = document.createDocumentFragment();
   $('ruleCount').textContent = q ? '匹配 ' + items.length + ' / ' + all.length : '共 ' + all.length + ' 条';
 
   if (!items.length) {
     const d = el('div', 'rule-empty', q ? '没有匹配的规则' : '还没有规则，点「+ 新增规则」加一条');
-    list.appendChild(d);
+    frag.appendChild(d);
+    list.appendChild(frag);
     return;
   }
   // 自定义的排前面，便于查看自己加过什么
@@ -344,9 +417,13 @@ function renderRules() {
     del.addEventListener('click', () => delRule(x));
     row.appendChild(key); row.appendChild(val); row.appendChild(tag);
     row.appendChild(edit); row.appendChild(del);
-    list.appendChild(row);
+    frag.appendChild(row);
   }
+  list.appendChild(frag);
 }
+
+// 规则四百多条，键入时全量重建 DOM 会顿；防抖 120ms
+const renderRulesSoon = debounce(renderRules, 120);
 
 function openRuleForm(item) {
   $('ruleErr').textContent = '';
@@ -431,7 +508,7 @@ function switchTab(t) {
 
 $('tabDomain').addEventListener('click', () => switchTab('domain'));
 $('tabKeyword').addEventListener('click', () => switchTab('keyword'));
-$('ruleSearch').addEventListener('input', renderRules);
+$('ruleSearch').addEventListener('input', renderRulesSoon);
 $('ruleAdd').addEventListener('click', () => openRuleForm(null));
 $('rfSave').addEventListener('click', saveRule);
 $('rfCancel').addEventListener('click', closeRuleForm);

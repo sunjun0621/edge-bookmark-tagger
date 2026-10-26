@@ -57,9 +57,8 @@ async function folderTitleExists(title) {
 }
 
 let folderCache = { at: 0, map: {} };
-async function folderIds(force) {
-  if (!force && Date.now() - folderCache.at < 60000 && Object.keys(folderCache.map).length) return folderCache.map;
-  const tree = await chrome.bookmarks.getTree();
+// 已有现成书签树时直接用，省一次全树读取（启动路径上树要读两遍，合并成一遍）
+function mapFolderIdsFromTree(tree) {
   const map = {};
   const names = FOLDERS.map(f => f.name);
   (function walk(nodes) {
@@ -68,15 +67,23 @@ async function folderIds(force) {
       if (n.children) walk(n.children);
     }
   })(tree);
+  return map;
+}
+
+async function folderIds(force) {
+  if (!force && Date.now() - folderCache.at < 60000 && Object.keys(folderCache.map).length) return folderCache.map;
+  const tree = await chrome.bookmarks.getTree();
+  const map = mapFolderIdsFromTree(tree);
   folderCache = { at: Date.now(), map };
   return map;
 }
 
 // 幂等迁移：真实文件夹名「丨」→「｜」。检测不到旧名就跳过，不用 storage 标记位
-async function migrateFolderNames() {
+// tree 参数可选：启动路径上由调用方传入，避免再读一遍全树
+async function migrateFolderNames(tree) {
   const exist = {};
   try {
-    const tree = await chrome.bookmarks.getTree();
+    tree = tree || await chrome.bookmarks.getTree();
     (function walk(nodes) {
       for (const n of nodes) {
         // 目录自身有 children，不能靠 else 分支判断，必须先收自己再下钻
@@ -139,7 +146,8 @@ async function findDuplicate(url, selfId) {
   return same.length ? same[0] : null;
 }
 
-async function moveToFolder(nodeId, prefix, folderOverride) {
+// node 可选：调用方手里已有书签节点时（如 onCreated 事件）直接传入，省一次 get 往返
+async function moveToFolder(nodeId, prefix, folderOverride, node) {
   const folderName = prefix
     ? (folderOverride || PREFIX_FOLDER[prefix] || CUSTOM_PREFIX[prefix] || defaultFolderName())
     : null;
@@ -147,7 +155,7 @@ async function moveToFolder(nodeId, prefix, folderOverride) {
   const ids = await folderIds();
   const target = ids[folderName];
   if (!target) return null;
-  const [node] = await chrome.bookmarks.get(nodeId);
+  if (!node) { [node] = await chrome.bookmarks.get(nodeId); }
   if (node.parentId !== target) {
     try { await chrome.bookmarks.move(nodeId, { parentId: target, index: 0 }); } catch (e) { console.warn(e); }
   }

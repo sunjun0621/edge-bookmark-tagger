@@ -170,14 +170,19 @@ function checkMissing(folders, ids) {
 }
 
 async function init() {
-  const f = await chrome.runtime.sendMessage({ type: 'folders' });
+  // 三路并行：配置、当前标签页、历史记录互不依赖，串行等会让面板白白慢一截
+  const [f, tab, recentP, recentKw] = await Promise.all([
+    chrome.runtime.sendMessage({ type: 'folders' }),
+    currentTab(),
+    loadRecent(),
+    loadRecentKw()
+  ]);
   Object.assign(CUSTOM_PREFIX, (f && f.customs) || {});
   applyFolders(f && f.folders);
   buildFolderSelect();
-  buildPrefixList((f && f.folders) || FOLDERS, await loadRecent(), await loadRecentKw());
+  buildPrefixList((f && f.folders) || FOLDERS, recentP, recentKw);
   checkMissing(f && f.folders, f && f.ids);
 
-  const tab = await currentTab();
   tabInfo = { url: tab.url || '', title: tab.title || '' };
 
   const supported = /^https?:/i.test(tabInfo.url);
@@ -185,6 +190,11 @@ async function init() {
   $('pageTitle').title = tabInfo.title || '';
   $('pageUrl').textContent = tabInfo.url || '';
   $('pageUrl').title = tabInfo.url || '';
+
+  // 预判与「一次性迁移提示」也并行：preview 要等后台判定，notice 只读一次存储
+  const previewPromise = supported
+    ? chrome.runtime.sendMessage({ type: 'preview', url: tabInfo.url, title: tabInfo.title })
+    : Promise.resolve(null);
 
   if (!supported) {
     $('prefix').value = CONST.UNKNOWN_PREFIX;
@@ -194,16 +204,16 @@ async function init() {
     refreshOut();
     $('save').disabled = true;
     setNote('这个页面不能收藏（只有普通网页可以）', true);
-  } else {
-    const r = await chrome.runtime.sendMessage({ type: 'preview', url: tabInfo.url, title: tabInfo.title });
+  }
+
+  const [r] = await Promise.all([previewPromise, noticeOnce()]);
+  if (r) {
     $('prefix').value = r.prefix || '';
     $('name').value = r.name || '';
     $('kw').value = r.kw || '';
     syncFolder();
     refreshOut();
   }
-
-  await noticeOnce();
 }
 
 $('prefix').addEventListener('input', () => { syncFolder(); refreshOut(); });
