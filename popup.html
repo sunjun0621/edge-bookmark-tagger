@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+  :root { color-scheme: light dark; --bg:#f7f6f3; --card:#ffffff; --fg:#37352f; --muted:#787774; --faint:#b8b6b1;
+          --line:#e6e4df; --accent:#2383e2; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1f1f1e; --card:#2a2a28; --fg:#e8e6e3; --muted:#9b9a97; --faint:#6f6e6b;
+            --line:#3a3a38; --accent:#4a9eea; }
+  }
+  * { box-sizing: border-box; }
+  body { width: 360px; margin: 0; padding: 14px; background: var(--bg); color: var(--fg);
+         font: 13px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  h1 { font-size: 13px; font-weight: 500; margin: 0 0 8px; color: var(--muted); }
+  label { display: flex; justify-content: space-between; gap: 6px; font-size: 12px;
+          color: var(--muted); margin: 8px 0 3px; white-space: nowrap; }
+  .cnt { color: var(--faint); font-variant-numeric: tabular-nums; }
+  input, select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px;
+                  background: var(--card); color: var(--fg); font-size: 13px; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  select { appearance: none; -webkit-appearance: none; padding-right: 24px; cursor: pointer;
+           background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6' viewBox='0 0 9 6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='%23888' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E");
+           background-repeat: no-repeat; background-position: right 8px center; }
+  .page { padding: 7px 9px; background: var(--card); border: 1px solid var(--line); border-radius: 6px; }
+  .page .t { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .page .u { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .airow { margin-top: 8px; }
+  .airow button { width: 100%; padding: 6px 10px; font-size: 12.5px; }
+  .airow .err { color: #c2453a; }
+  @media (prefers-color-scheme: dark) { .airow .err { color: #e0796d; } }
+  .row { display: flex; gap: 8px; align-items: flex-end; }
+  .row > div { flex: 1; min-width: 0; }
+
+  /* 自绘下拉：原生 datalist 用系统字体、条目多时明显卡顿，这里全部自绘 */
+  .combo { position: relative; }
+  .combo input { padding-right: 22px; }
+  .combo::after { content: ''; position: absolute; right: 8px; top: 50%; width: 8px; height: 8px;
+                  margin-top: -5px; border-right: 1.4px solid var(--faint); border-bottom: 1.4px solid var(--faint);
+                  transform: rotate(45deg); pointer-events: none; }
+  .combo-list { position: absolute; left: 0; right: 0; top: calc(100% + 2px); z-index: 20;
+                max-height: 116px; overflow-y: auto; padding: 3px;
+                background: var(--card); border: 1px solid var(--line); border-radius: 6px;
+                box-shadow: 0 6px 18px rgba(0,0,0,.10); display: none; }
+  .combo-list.up { top: auto; bottom: calc(100% + 2px); box-shadow: 0 -6px 18px rgba(0,0,0,.10); }
+  .combo-list.on { display: block; }
+  .combo-list .opt { padding: 5px 7px; border-radius: 4px; font-size: 12.5px; cursor: pointer;
+                     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .combo-list .opt:hover, .combo-list .opt.cur { background: var(--bg); }
+  .combo-list .opt.cur { color: var(--accent); }
+  .combo-list .none { padding: 8px; font-size: 12px; color: var(--faint); text-align: center; }
+  .preview { margin-top: 10px; padding: 8px 10px; background: var(--card); border: 1px solid var(--line);
+             border-radius: 6px; font-size: 13px; word-break: break-all; min-height: 34px; }
+  .meta { font-size: 11px; color: var(--muted); margin-top: 5px; min-height: 15px; }
+  .btns { display: flex; gap: 8px; margin-top: 10px; }
+  .fix { margin-top: 8px; }
+  .fix button { width: 100%; }
+  button { flex: 1; padding: 8px 10px; border: 0; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  .primary { background: var(--accent); color: #fff; }
+  .ghost { background: var(--card); border: 1px solid var(--line); color: var(--fg); }
+  button:disabled { opacity: .5; cursor: default; }
+</style>
+</head>
+<body>
+<h1>收藏当前页</h1>
+<div class="page">
+  <div class="t" id="pageTitle">读取中…</div>
+  <div class="u" id="pageUrl"></div>
+</div>
+<div class="airow">
+  <button class="ghost" id="aiFill">✨ 让 AI 帮我填</button>
+</div>
+<div class="row">
+  <div>
+    <label>类别</label>
+    <div class="combo">
+      <input id="prefix" autocomplete="off" placeholder="游戏">
+      <div class="combo-list" id="prefixList"></div>
+    </div>
+  </div>
+  <div>
+    <label>用途</label>
+    <div class="combo">
+      <input id="kw" autocomplete="off" placeholder="攻略">
+      <div class="combo-list" id="kwList"></div>
+    </div>
+  </div>
+</div>
+<label>名称<span class="cnt" id="nameCnt">0/14</span></label>
+<input id="name" maxlength="14" placeholder="BT游戏全网整合">
+<label>放进文件夹</label>
+<select id="folder"></select>
+<label>书签会变成</label>
+<div class="preview" id="out">—</div>
+<div class="meta" id="note"></div>
+<div class="fix" id="fix" style="display:none">
+  <button class="ghost" id="fixBtn">创建缺失文件夹</button>
+</div>
+<div class="btns">
+  <button class="primary" id="save">保存并整理</button>
+  <button class="ghost" id="opt">设置</button>
+</div>
+<script src="rules.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "github.com": ["开发", "GitHub", "代码托管"],
+  "stackoverflow.com": ["开发", "Stack Overflow", "技术问答"],
+  "bilibili.com": ["视频", "哔哩哔哩", "在线观看"],
+  "youtube.com": ["视频", "YouTube", "在线观看"],
+  "chatgpt.com": ["AI", "ChatGPT", "对话"],
+  "claude.ai": ["AI", "Claude", "对话"],
+  "docs.qq.com": ["办公", "腾讯文档", "在线文档"],
+  "wps.cn": ["办公", "WPS", "在线办公"],
+  "zhihu.com": ["阅读", "知乎", "问答"],
+  "douban.com": ["阅读", "豆瓣", "书影音"]
+}

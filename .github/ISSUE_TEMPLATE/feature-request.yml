@@ -1,0 +1,47 @@
+name: 功能建议 / 使用意见
+description: 用着不顺手的地方，或者想要的新功能
+title: "[建议] "
+labels: enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。说清楚「你在什么场景下、卡在哪一步」比单纯说「希望加个 XX 功能」有用得多。
+  - type: textarea
+    id: scene
+    attributes:
+      label: 你遇到的情况
+      description: 什么场景下觉得不方便？现在得怎么绕过去？
+      placeholder: |
+        例：我每天要收十几个技术文章，类别基本都在「开发」和「学习」之间。
+        现在每次都得点开下拉选，能不能记住上次用的、或者按快捷键切换？
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: 你希望怎么改
+      description: 有具体想法就写，没有也行——说清楚痛点就够
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: 涉及哪部分
+      options:
+        - 收藏面板
+        - 设置页 - 文件夹
+        - 设置页 - 类别一览
+        - 设置页 - 自动归类规则
+        - AI 自动识别
+        - 分类准确性
+        - 其它
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充
+      description: 截图、你现在的规则量级、用的哪个浏览器等
+    validations:
+      required: false

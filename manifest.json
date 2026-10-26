@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "书签自动归类 · 【前缀】名称｜关键词",
+  "version": "1.8.0",
+  "description": "收藏即自动改名为【类别】名称｜用途关键词，并平铺归入一级文件夹（默认 工作｜学习 / 生活｜娱乐 / 技术｜工具 / 其他｜归档，可在设置页增删）。",
+  "permissions": [
+    "bookmarks",
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "书签归类",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    }
+  },
+  "options_page": "options.html",
+  "minimum_chrome_version": "102",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

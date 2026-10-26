@@ -1,0 +1,65 @@
+name: 分类判错了
+description: 某个网页被归到了错误的类别或文件夹
+title: "[判错] "
+labels: classification
+body:
+  - type: markdown
+    attributes:
+      value: |
+        分类判错是最常见的反馈，谢谢帮忙改进。填得越具体，越容易变成内置规则的修正。
+  - type: input
+    id: url
+    attributes:
+      label: 网址
+      description: 私密站点只填域名就行
+      placeholder: https://example.com/some/page
+    validations:
+      required: true
+  - type: input
+    id: title
+    attributes:
+      label: 页面标题
+      description: 浏览器标签页上显示的那个标题
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 它被归成了什么
+      placeholder: 比如：【工具】某某站｜在线工具，进了「技术｜工具」
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 你期望归成什么
+      placeholder: 比如：【学习】某某站｜教程，应该进「工作｜学习」
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: 怎么收藏的
+      options:
+        - Ctrl+D 自动归类
+        - 面板手动保存
+        - 面板「让 AI 帮我填」
+    validations:
+      required: true
+  - type: dropdown
+    id: ai
+    attributes:
+      label: 有没有配 AI
+      options:
+        - 没配
+        - 配了，测试通过
+        - 配了，但测试不通
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充
+      description: 截图、你自己加的规则等
+    validations:
+      required: false

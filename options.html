@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>书签归类 · 设置</title>
+<style>
+  :root { color-scheme: light dark; --bg:#f7f6f3; --card:#ffffff; --fg:#37352f; --muted:#787774; --faint:#b8b6b1;
+          --line:#e6e4df; --accent:#2383e2; --danger:#c2453a; --ok:#2f855a; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1f1f1e; --card:#2a2a28; --fg:#e8e6e3; --muted:#9b9a97; --faint:#6f6e6b;
+            --line:#3a3a38; --accent:#4a9eea; --danger:#e0796d; --ok:#6fbf8f; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 26px 24px 0; background: var(--bg); color: var(--fg);
+         font: 14px/1.7 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 660px; margin: 0 auto; }
+
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  h1 { font-size: 17px; font-weight: 600; margin: 0; letter-spacing: .2px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 2px 0 18px; }
+  .saved { font-size: 12px; color: var(--ok); opacity: 0; transition: opacity .2s; }
+  .saved.on { opacity: 1; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+          padding: 12px 14px 14px; margin-bottom: 10px; }
+  .card-h { font-size: 13px; font-weight: 600; color: var(--fg); margin-bottom: 4px;
+            display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .card-h .hint-inline { font-weight: 400; font-size: 11.5px; color: var(--faint); }
+
+  .sw { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg);
+        margin: 9px 0; cursor: pointer; }
+  .sw input[type=checkbox] { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); }
+  .fld { display: flex; align-items: center; gap: 10px; margin: 12px 0 2px; }
+  .fld-l { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+
+  input[type=text], input[type=password], select {
+    width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px;
+    font-size: 13px; background: var(--card); color: var(--fg); }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  select { appearance: none; -webkit-appearance: none; padding-right: 24px; cursor: pointer;
+           background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6' viewBox='0 0 9 6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='%23888' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E");
+           background-repeat: no-repeat; background-position: right 9px center; }
+  .row { display: flex; gap: 8px; align-items: center; margin: 10px 0 2px; }
+  .row > input[type=text], .row > input[type=password] { flex: 1; min-width: 0; }
+  .row > select { width: 158px; flex: 0 0 auto; }
+  .row .fld-l { flex: 0 0 auto; min-width: 30px; }
+
+  button { padding: 7px 14px; border: 0; border-radius: 6px; font-size: 13px; cursor: pointer;
+           white-space: nowrap; }
+  .primary { background: var(--accent); color: #fff; }
+  .ghost { background: var(--card); border: 1px solid var(--line); color: var(--fg); }
+  .ghost:hover { border-color: var(--faint); }
+  button:disabled { opacity: .5; cursor: default; }
+
+  .hint { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
+  .out { margin-top: 10px; padding: 9px 12px; background: var(--bg); border: 1px solid var(--line);
+         border-radius: 6px; font-size: 12.5px; white-space: pre-wrap; word-break: break-all;
+         color: var(--muted); }
+  .err { font-size: 12px; color: var(--danger); margin-top: 5px; }
+  .err.ok { color: var(--ok); }
+  .mono { font-family: ui-monospace, Consolas, monospace; background: var(--bg);
+          padding: 1px 5px; border-radius: 4px; }
+
+  .fd-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 7px 0 0; }
+  .fd-row > input[type=text] { flex: 1; min-width: 150px; }
+  .fd-meta { font-size: 11.5px; color: var(--faint); white-space: nowrap; }
+  .fd-row .err { flex-basis: 100%; margin-top: 0; }
+  .cp-row { display: flex; gap: 8px; align-items: center; margin: 8px 0 0; }
+  .cp-row > span { flex: 1; font-size: 13px; }
+
+  /* 类别一览 */
+  .cat-only { flex: 0 0 auto; margin: 0; align-items: center; gap: 5px; }
+  .cat-only span { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .cat-list { max-height: 300px; overflow-y: auto; margin-top: 8px;
+              border: 1px solid var(--line); border-radius: 8px; }
+  .cat-list:empty { display: none; }
+  .cat-item { display: flex; gap: 8px; align-items: center; padding: 7px 10px;
+              border-bottom: 1px solid var(--line); font-size: 13px; }
+  .cat-item:last-child { border-bottom: 0; }
+  .cat-item:hover { background: var(--bg); }
+  .cat-item .c-name { flex: 0 0 auto; min-width: 74px; font-weight: 500; }
+  .cat-item .c-sel { flex: 1; min-width: 0; }
+  .cat-item .c-sel select { padding: 4px 8px; font-size: 12.5px; padding-right: 22px; }
+  .cat-item .c-rules { flex: 0 0 auto; font-size: 11px; color: var(--faint); white-space: nowrap; }
+  .cat-item .c-tag { flex: 0 0 auto; font-size: 10.5px; padding: 1px 6px; border-radius: 8px;
+                     background: var(--bg); color: var(--faint); border: 1px solid var(--line); }
+  .cat-item .c-tag.mine { color: var(--accent); border-color: var(--accent); }
+  .cat-item button { padding: 3px 8px; font-size: 11.5px; }
+  .cat-empty { padding: 18px; text-align: center; color: var(--faint); font-size: 12.5px; }
+
+  /* 规则编辑 */
+  .rule-bar { display: flex; gap: 8px; align-items: center; margin: 4px 0 2px; }
+  .rule-bar input[type=text] { flex: 1; min-width: 0; }
+  .rule-tabs { display: flex; gap: 4px; }
+  .rule-tabs button { padding: 5px 12px; font-size: 12.5px; border-radius: 6px;
+                      background: transparent; color: var(--muted); border: 1px solid transparent; }
+  .rule-tabs button.on { background: var(--bg); color: var(--fg); border-color: var(--line); }
+  .rule-list { max-height: 420px; overflow-y: auto; margin-top: 8px;
+               border: 1px solid var(--line); border-radius: 8px; }
+  .rule-list:empty { display: none; }
+  .rule-item { display: flex; gap: 8px; align-items: center; padding: 6px 10px;
+               border-bottom: 1px solid var(--line); font-size: 12.5px; }
+  .rule-item:last-child { border-bottom: 0; }
+  .rule-item:hover { background: var(--bg); }
+  .rule-item .r-key { flex: 1.4; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+                      white-space: nowrap; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  .rule-item .r-val { flex: 1.6; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+  .rule-item .r-tag { flex: 0 0 auto; font-size: 10.5px; padding: 1px 6px; border-radius: 8px;
+                      background: var(--bg); color: var(--faint); border: 1px solid var(--line); }
+  .rule-item .r-tag.mine { color: var(--accent); border-color: var(--accent); }
+  .rule-item button { padding: 3px 8px; font-size: 11.5px; }
+  .rule-empty { padding: 18px; text-align: center; color: var(--faint); font-size: 12.5px; }
+  .rule-form { display: none; gap: 8px; align-items: center; flex-wrap: wrap;
+               margin-top: 8px; padding: 10px; background: var(--bg);
+               border: 1px solid var(--line); border-radius: 8px; }
+  .rule-form.on { display: flex; }
+  .rule-form input[type=text] { flex: 1; min-width: 110px; }
+  .rule-form select { width: 132px; flex: 0 0 auto; }
+  .rule-count { font-size: 11.5px; color: var(--faint); margin-left: auto; }
+
+  details.mini { background: transparent; border: 0; border-radius: 0; padding: 0; margin: 10px 0 0; }
+  details.mini summary { padding: 4px 0; font-weight: 400; font-size: 12.5px; color: var(--muted); }
+  details.mini[open] { padding-bottom: 0; }
+
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+            padding: 0 16px; margin-bottom: 12px; }
+  details[open] { padding-bottom: 14px; }
+  summary { padding: 13px 0; font-size: 13px; font-weight: 600; cursor: pointer;
+            list-style: none; display: flex; align-items: center; gap: 8px; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: '▸'; color: var(--faint); font-size: 11px; transition: transform .15s; }
+  details[open] summary::before { transform: rotate(90deg); }
+  summary .s-sub { font-weight: 400; font-size: 11.5px; color: var(--faint); }
+  details .block { padding-top: 4px; }
+  details .block + .block { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 14px; }
+  .block-h { font-size: 12.5px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+
+  .bar { position: sticky; bottom: 0; display: flex; justify-content: flex-end; align-items: center;
+         gap: 12px; padding: 12px 0 14px; margin-top: 4px;
+         background: var(--bg); border-top: 1px solid var(--line); }
+  .bar .tip { font-size: 12px; color: var(--faint); margin-right: auto; }
+
+  .kb { font-size: 12.5px; color: var(--muted); line-height: 2; }
+  .kb b { color: var(--fg); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>书签自动归类</h1>
+  <span class="saved" id="saved">已保存</span>
+</header>
+<p class="sub">收藏网页时自动起名、自动分类。改完点右下「保存设置」。</p>
+
+<section class="card">
+  <div class="card-h">开关</div>
+  <label class="sw"><input type="checkbox" id="enabled"><span>收藏时自动归类（Ctrl+D 后自动改名并移动）</span></label>
+  <label class="sw"><input type="checkbox" id="dedupe"><span>重复的网址标成【待删】</span></label>
+  <div class="fld">
+    <span class="fld-l">认不出的网页</span>
+    <select id="unknown">
+      <option value="待整理">放进「其他｜归档」并标【待整理】</option>
+      <option value="keep">保持原样，不动它</option>
+    </select>
+  </div>
+</section>
+
+<section class="card">
+  <div class="card-h">文件夹<span class="hint-inline">书签按这里分类存放</span></div>
+  <div class="row">
+    <input type="text" id="fdName" placeholder="音乐｜音频">
+    <button class="primary" id="fdAdd">新建</button>
+  </div>
+  <div class="err" id="fdErr"></div>
+  <div id="fdList"></div>
+  <div class="hint" style="margin-top:8px">改名只改文件夹本身；要把某个类别换文件夹，到下面「类别一览」里每行右侧的下拉直接改。</div>
+</section>
+
+<section class="card">
+  <div class="card-h">类别一览<span class="hint-inline">书签标题里【】中的名字</span></div>
+  <div class="rule-bar">
+    <input type="text" id="catSearch" placeholder="搜索类别名…" autocomplete="off">
+    <label class="sw cat-only"><input type="checkbox" id="catOnlyMine"><span>只看自己加的</span></label>
+  </div>
+  <div class="row">
+    <input type="text" id="catName" placeholder="新类别名，如 音乐" autocomplete="off" maxlength="14">
+    <select id="catFolder"></select>
+    <button class="primary" id="catAdd">新增</button>
+  </div>
+  <div class="err" id="catErr"></div>
+  <div class="cat-list" id="catList"></div>
+  <div class="hint" style="margin-top:8px">删除只影响以后的归类，已有书签不会动。自带类别不能删，但可以换文件夹。</div>
+</section>
+
+<section class="card">
+  <div class="card-h">自动归类规则<span class="hint-inline">网址命中就用它，不看页面标题</span></div>
+  <div class="rule-bar">
+    <div class="rule-tabs">
+      <button type="button" id="tabDomain" class="on">按网址</button>
+      <button type="button" id="tabKeyword">按标题关键词</button>
+    </div>
+    <input type="text" id="ruleSearch" placeholder="搜索网址或名称…" autocomplete="off">
+  </div>
+  <div class="rule-bar">
+    <button class="ghost" id="ruleAdd">+ 新增规则</button>
+    <span class="rule-count" id="ruleCount"></span>
+  </div>
+  <div class="rule-form" id="ruleForm">
+    <input type="text" id="rfKey" placeholder="网址，如 example.com" autocomplete="off">
+    <input type="text" id="rfName" placeholder="名称" autocomplete="off">
+    <input type="text" id="rfKw" placeholder="关键词" autocomplete="off">
+    <select id="rfPrefix"></select>
+    <button class="primary" id="rfSave">保存</button>
+    <button class="ghost" id="rfCancel">取消</button>
+  </div>
+  <div class="err" id="ruleErr"></div>
+  <div class="rule-list" id="ruleList"></div>
+  <div class="hint" style="margin-top:8px">改了立即生效，不用重新加载扩展。删掉的内置规则可以点「恢复初始规则」找回。</div>
+</section>
+
+<details id="adv">
+  <summary>更多设置<span class="s-sub">AI 自动识别 · 备份恢复 · 试算 · 检查</span></summary>
+
+  <div class="block">
+    <div class="block-h">AI 自动识别</div>
+    <div class="hint" style="margin:0 0 6px">网址和标题都匹配不到规则时，交给 AI 判断类别。不填就用不了，填了更好用。</div>
+    <label class="sw"><input type="checkbox" id="useai"><span>开启（只发送页面标题和网址，不发送网页内容）</span></label>
+    <div class="row"><span class="fld-l">服务地址</span><input type="text" id="aibase" placeholder="https://api.deepseek.com/v1"></div>
+    <div class="row"><span class="fld-l">模型</span><input type="text" id="aimodel" list="aiModelList" placeholder="deepseek-chat" autocomplete="off"><datalist id="aiModelList"></datalist></div>
+    <div class="row"><span class="fld-l">密钥</span><input type="password" id="apikey" placeholder="不填则完全离线使用"></div>
+    <div class="row">
+      <button class="ghost" id="aiTest">测试一下</button>
+      <span class="hint" style="margin:0">等 3 秒没回应就自动放弃，不影响收藏。</span>
+    </div>
+    <div class="out" id="aiOut" style="display:none"></div>
+  </div>
+
+  <div class="block">
+    <div class="block-h">备份与恢复规则</div>
+    <div class="row" style="flex-wrap:wrap">
+      <button class="ghost" id="expBtn">导出规则文件</button>
+      <button class="ghost" id="impBtn">从文件导入</button>
+      <button class="ghost" id="ruleReset">恢复初始规则</button>
+      <input type="file" id="impFile" accept=".json,application/json" style="display:none">
+    </div>
+    <div class="hint">导入只增加规则，不改你的文件夹和类别。「恢复初始规则」会清掉所有自己加的改动，回到扩展自带的那套。</div>
+    <div class="out" id="impOut" style="display:none"></div>
+  </div>
+
+  <div class="block">
+    <div class="block-h">试算一下</div>
+    <div class="hint" style="margin:0 0 6px">填一个标题和网址，看看会被归到哪个类别、哪个文件夹。</div>
+    <div class="row"><span class="fld-l">标题</span><input type="text" id="tTitle" value="某短剧网 - 免费在线观看最新短剧"></div>
+    <div class="row"><span class="fld-l">网址</span><input type="text" id="tUrl" value="https://example-duanju.com/play/123"></div>
+    <div class="row"><button class="primary" id="test">试算</button></div>
+    <div class="out" id="testOut" style="display:none"></div>
+  </div>
+
+  <div class="block">
+    <div class="block-h">检查问题</div>
+    <div class="row"><button class="ghost" id="reload">查看文件夹是否齐全</button></div>
+    <div class="out" id="folderOut" style="display:none"></div>
+    <div class="hint">规则库在 <span class="mono">rules.js</span>。改过文件后到 edge://extensions 点「重新加载」。</div>
+  </div>
+</details>
+
+<details>
+  <summary>使用说明</summary>
+  <div class="kb">
+    <b>书签长什么样</b>：<span class="mono">【类别】名称｜用途</span>，中间只用一个「｜」。<br>
+    <b>用途会去重</b>：如果用途和名称尾部重复就剪掉（福利学术导航+导航 → 福利学术｜导航）；剪完不足 3 字或夹在中间就省掉（腾讯会议+会议 → 腾讯会议）。<br>
+    <b>自动收藏</b>：按 Ctrl+D 后约 1 秒改好；浏览器那个收藏小框里显示的还是原标题，属正常，关掉即可。<br>
+    <b>认不出的网页</b>：先看网址有没有规则，再看标题关键词，都没有才交给 AI（需在「更多设置」里配好），最后才落「待整理」。想验证某个网址，用「更多设置 → 试算一下」。<br>
+    <b>哪些页面有效</b>：只有普通网页（http / https）。edge://、chrome:// 这类浏览器内部页面不行。
+  </div>
+</details>
+
+<div class="bar">
+  <span class="tip">设置只存本机，不上传云端</span>
+  <button class="primary" id="save">保存设置</button>
+</div>
+
+</div>
+<script src="rules.js"></script>
+<script src="options.js"></script>
+</body>
+</html>
