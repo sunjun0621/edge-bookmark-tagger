@@ -13,7 +13,7 @@
   * { box-sizing: border-box; }
   body { margin: 0; padding: 26px 24px 0; background: var(--bg); color: var(--fg);
          font: 14px/1.7 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
-  .wrap { max-width: 660px; margin: 0 auto; }
+  .wrap { max-width: 660px; margin: 0 auto; padding-bottom: 72px; }
 
   header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
   h1 { font-size: 17px; font-weight: 600; margin: 0; letter-spacing: .2px; }
@@ -81,7 +81,16 @@
               background: var(--card); color: var(--fg); cursor: pointer; flex: 0 0 auto; }
   .cat-chip:hover { border-color: var(--accent); color: var(--accent); }
   .cat-chip.mine { border-color: var(--accent); color: var(--accent); background: var(--bg); }
+  .cat-chip.on { border-color: var(--accent); color: var(--accent); background: var(--bg);
+                 box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent); }
   .cat-empty { padding: 18px; text-align: center; color: var(--faint); font-size: 12.5px; }
+  /* 空文件夹提示条：配置里有但没类别，正常分组里看不到，单独列出来给删除入口 */
+  .cat-empty-folder { display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+                      margin: 10px 0 2px; padding: 8px 10px; font-size: 12px;
+                      color: var(--muted); background: var(--bg);
+                      border: 1px dashed var(--line); border-radius: 8px; }
+  .cat-empty-folder > span { flex: 1 1 100%; }
+  .cat-empty-folder button { padding: 4px 10px; font-size: 12px; }
 
   /* 点击类别后弹出的操作浮层（挂在 body 上，不会被滚动区裁掉） */
   .cat-pop { position: fixed; z-index: 60; min-width: 208px; padding: 10px;
@@ -148,11 +157,14 @@
   details .block + .block { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 14px; }
   .block-h { font-size: 12.5px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
 
+  /* 吸底保存栏浮在内容之上，会压住列表末尾几行。整条栏不吃点击、只让按钮接收，
+     这样被压住一半的类别 chip 仍可点中（否则点了落在栏上，看着像没反应）。 */
   .bar { position: sticky; bottom: 0; display: flex; justify-content: flex-end; align-items: center;
          gap: 12px; padding: 12px 0 14px; margin-top: 4px;
-         background: var(--bg); border-top: 1px solid var(--line); }
+         background: var(--bg); border-top: 1px solid var(--line); pointer-events: none; }
+  .bar > * { pointer-events: none; }
+  .bar > button { pointer-events: auto; }
   .bar .tip { font-size: 12px; color: var(--faint); margin-right: auto; }
-
   .kb { font-size: 12.5px; color: var(--muted); line-height: 2; }
   .kb b { color: var(--fg); font-weight: 600; }
 </style>
@@ -187,7 +199,7 @@
   </div>
   <div class="err" id="fdErr"></div>
   <div id="fdList"></div>
-  <div class="hint" style="margin-top:8px">改名只改文件夹本身；要把某个类别换文件夹，到下面「类别一览」里每行右侧的下拉直接改。</div>
+  <div class="hint" style="margin-top:8px">改名只改文件夹本身；要把某个类别换文件夹，到下面「类别一览」里点类别改。</div>
 </section>
 
 <section class="card">
@@ -199,7 +211,7 @@
   <div class="row">
     <input type="text" id="catName" placeholder="新类别名，如 音乐" autocomplete="off" maxlength="14">
     <select id="catFolder"></select>
-    <button class="primary" id="catAdd">新增</button>
+    <button class="primary" id="catAdd">新增类别</button>
   </div>
   <div class="err" id="catErr"></div>
   <div class="cat-groups" id="catList"></div>

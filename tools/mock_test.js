@@ -486,7 +486,7 @@ function send(store, msg) {
   ok(!ca.ok && /请选择/.test(ca.msg), '目标文件夹不存在被拒');
   const bname = builtinCat.name;
   ca = await send(store, { type: 'catAdd', name: bname, folder: '技术｜工具' });
-  ok(!ca.ok && /自带的类别/.test(ca.msg), '重名自带类别被拒：' + ca.msg);
+  ok(!ca.ok && /已经是类别/.test(ca.msg), '重名自带类别被拒（提示去移动）：' + ca.msg);
 
   // 移动到另一个文件夹
   let cm = await send(store, { type: 'catMove', name: '我的音乐', folder: '技术｜工具' });
@@ -507,9 +507,31 @@ function send(store, msg) {
   ok(cd.ok, '删除自定义类别成功');
   cl = await send(store, { type: 'catList' });
   ok(!cl.items.find(x => x.name === '我的音乐'), '删除后列表里不再出现');
-  // 自带类别不能删
+  // 自带类别现在也能删：记进删除表、从文件夹配置摘掉、停用引用它的规则
+  // 注意：断言一律走消息（rulesList / catList），别读 ctx 里的变量——
+  // 本文件多次 loadExt 共用同一个 chrome mock，消息可能由另一个沙箱处理，读到的会是旧值
+  const rl0 = await send(store, { type: 'rulesList' });
+  const beforeRules = rl0.domain.length;
   cd = await send(store, { type: 'catDel', name: bname });
-  ok(!cd.ok && /不能删除/.test(cd.msg), '自带类别拒绝删除：' + cd.msg);
+  ok(cd.ok && cd.builtin, '自带类别可以删除：' + JSON.stringify(cd));
+  cl = await send(store, { type: 'catList' });
+  ok(!cl.items.find(x => x.name === bname), '删掉的自带类别不再出现在列表');
+  const rl1 = await send(store, { type: 'rulesList' });
+  ok(rl1.domain.length <= beforeRules, '引用它的网址规则被停用（' + beforeRules + ' → ' + rl1.domain.length + '）');
+  const pr = storage.data.rulesPatch.prefixRemove || {};
+  ok(pr[bname] === 1, '删除记录写进了 prefixRemove，重启不复活');
+
+  // 重新加回来：从删除表摘掉、归属还回去
+  ca = await send(store, { type: 'catAdd', name: bname, folder: '技术｜工具' });
+  ok(ca.ok && ca.restored, '删掉的自带类别可以加回来');
+  cl = await send(store, { type: 'catList' });
+  const back = cl.items.find(x => x.name === bname);
+  ok(back && back.folder === '技术｜工具', '加回来后落在指定文件夹：' + (back && back.folder));
+
+  // 兜底类别不能删（认不出的网页 / 重复链接要用）
+  cd = await send(store, { type: 'catDel', name: ctx.CONST.UNKNOWN_PREFIX });
+  ok(!cd.ok && /兜底类别/.test(cd.msg), '兜底类别拒绝删除：' + cd.msg);
+
   // 删不存在的
   cd = await send(store, { type: 'catDel', name: '根本没这个' });
   ok(!cd.ok && /找不到/.test(cd.msg), '删不存在的类别给出提示');
@@ -553,6 +575,41 @@ function send(store, msg) {
   sg = await send(store, { type: 'suggest', url: 'https://no-rule-at-all.example/w', title: 'x' });
   ok(!sg.ok && /未启用或没填 Key/.test(sg.err), 'AI 没配时明确报错：' + sg.err);
   storage.data.useai = false;
+
+  // ── [21] 类别浮层的点击可达性（静态回归：这几处改坏就会让「点一下没反应」复现）
+  console.log('\n[21] 类别浮层可点性');
+  const html = fs.readFileSync(DIR + 'options.html', 'utf8');
+  const js = fs.readFileSync(DIR + 'options.js', 'utf8');
+
+  // 吸底保存栏必须不吃点击，只让按钮接收；否则被它压住的 chip 点不到
+  ok(/\.bar\s*\{[^}]*pointer-events:\s*none/.test(html), '吸底保存栏不吃点击（pointer-events: none）');
+  ok(/\.bar\s*>\s*button\s*\{[^}]*pointer-events:\s*auto/.test(html), '保存按钮自己仍可点');
+
+  // 列表滚动不能让浮层消失：滚动惯性未停时点 chip，浮层会刚出现就被关掉
+  ok(!/addEventListener\('scroll'[^)]*\)\s*;?\s*\/\/[^\n]*closeCatPop/.test(js), '滚动监听不直接关浮层');
+  ok(/addEventListener\('scroll'[\s\S]{0,120}placeCatPop/.test(js), '滚动时改为跟随重定位');
+  ok(/function placeCatPop/.test(js), '浮层定位抽成 placeCatPop');
+
+  // 打开浮层时给 chip 标记选中态，用户能看出自己点到了哪个
+  ok(/catPopAnchor\.classList\.add\('on'\)/.test(js), '打开时 chip 加选中态');
+  ok(/\.cat-chip\.on\s*\{/.test(html), '选中态有对应样式');
+
+  // ── [22] 空文件夹要能被看见并删掉
+  // 配置里有、但一个类别都没有的文件夹不会进正常分组，用户会以为"加的东西消失了"。
+  console.log('\n[22] 空文件夹提示与删除');
+  ok(/cat-empty-folder/.test(js), '渲染空文件夹提示条');
+  ok(/emptyFolders\s*=\s*FOLDER_LIST\.filter/.test(js), '从文件夹配置里挑出空的');
+  ok(/type:\s*'folderDel'/.test(js), '提示条里的按钮发 folderDel');
+  ok(/\.cat-empty-folder\s*\{/.test(html), '提示条有对应样式');
+  ok(/id="catAdd"[^>]*>新增类别</.test(html), '类别按钮写明「新增类别」，和文件夹的「新建」区分开');
+
+  // ── [23] 公开版示例规则保持精简（脱敏与"开箱不预设你的偏好"两条都靠它）
+  console.log('\n[23] 公开版示例规则');
+  const dom = JSON.parse(fs.readFileSync(DIR + 'tools/domain_rules.json', 'utf8'));
+  ok(Object.keys(dom).length === 3, '源数据只留 3 条示例：' + Object.keys(dom).join('、'));
+  const ctxRules = loadExt(store, storage);
+  ok(Object.keys(ctxRules.DOMAIN_RULES).length === 3, '生成后生效的域名规则也是 3 条');
+  ok(Object.keys(ctxRules.DOMAIN_RULES).indexOf('stackoverflow.com') >= 0, '含 Stack Overflow 示例');
 
   console.log('\n通过 ' + pass + ' / 失败 ' + fail);
   process.exit(fail ? 1 : 0);

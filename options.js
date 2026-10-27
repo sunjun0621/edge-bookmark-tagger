@@ -135,6 +135,29 @@ function renderCats() {
     return;
   }
 
+  // 空文件夹提示：配置里有、但一个类别都没有的文件夹不会出现在上面的分组里，
+  // 容易让人以为"加的东西没了"。这里直接列出来并给个删除入口。
+  const emptyFolders = FOLDER_LIST.filter(f => !f.prefixes || !f.prefixes.length);
+  if (emptyFolders.length && !onlyMine && !q) {
+    const w = el('div', 'cat-empty-folder');
+    w.appendChild(el('span', null, '这些文件夹还没有类别：' + emptyFolders.map(f => f.name).join('、')));
+    for (const f of emptyFolders) {
+      const b = el('button', 'ghost', '删掉「' + f.name + '」');
+      b.type = 'button';
+      b.addEventListener('click', async () => {
+        if (!confirm('把文件夹「' + f.name + '」从配置里移除？\n\n书签栏里的真实目录和里面已有的书签都不会删。')) return;
+        const r = await chrome.runtime.sendMessage({ type: 'folderDel', name: f.name });
+        if (!r || !r.ok) { $('catErr').textContent = (r && r.msg) || '删除失败'; return; }
+        $('catErr').className = 'err ok';
+        $('catErr').textContent = '已移除文件夹「' + f.name + '」';
+        await loadFolders();
+        await loadCats();
+      });
+      w.appendChild(b);
+    }
+    frag.appendChild(w);
+  }
+
   for (const [folder, arr] of groups) {
     const g = el('div', 'cat-group');
     const h = el('div', 'cat-group-h');
@@ -164,8 +187,22 @@ let catPopAnchor = null;
 function closeCatPop() {
   const pop = document.getElementById('catPop');
   if (pop) pop.remove();
+  if (catPopAnchor) catPopAnchor.classList.remove('on');
   catPopFor = null;
   catPopAnchor = null;
+}
+
+// 浮层定位：贴着 chip 下方；贴不下就翻到上方；左右不超出窗口
+function placeCatPop() {
+  const pop = document.getElementById('catPop');
+  if (!pop || !catPopAnchor) return;
+  const r = catPopAnchor.getBoundingClientRect();
+  const pw = pop.offsetWidth, ph = pop.offsetHeight;
+  const left = Math.max(8, Math.min(r.left, window.innerWidth - pw - 12));
+  let top = r.bottom + 6;
+  if (top + ph > window.innerHeight - 8) top = r.top - ph - 6;
+  pop.style.left = left + 'px';
+  pop.style.top = Math.max(8, top) + 'px';
 }
 
 function toggleCatPop(x, anchor) {
@@ -178,7 +215,7 @@ function toggleCatPop(x, anchor) {
   pop.id = 'catPop';
 
   pop.appendChild(el('div', 'p-name', x.name));
-  const sub = x.builtin ? '自带类别' : '我加的类别' + (x.rules ? ' · ' + x.rules + ' 条规则在用' : ' · 暂无规则在用');
+  const sub = (x.builtin ? '自带类别' : '我加的类别') + (x.rules ? ' · ' + x.rules + ' 条规则在用' : ' · 暂无规则在用');
   pop.appendChild(el('div', 'p-sub', sub));
 
   pop.appendChild(el('div', 'p-h', '移动到'));
@@ -198,37 +235,40 @@ function toggleCatPop(x, anchor) {
     pop.appendChild(b);
   }
 
-  if (!x.builtin) {
+  // 兜底类别（认不出的网页 / 重复链接）必须留着，收藏时才有着落
+  const isFallback = x.name === CONST.UNKNOWN_PREFIX || x.name === CONST.DUP_PREFIX;
+  if (!isFallback) {
     const d = el('button', 'p-del', '删除这个类别');
     d.type = 'button';
     d.addEventListener('click', async () => {
-      if (!confirm('删除类别「' + x.name + '」？\n\n以后不会再归到这个类别，已有书签不受影响。')) return;
+      const tip = x.builtin && x.rules
+        ? '\n\n它现在有 ' + x.rules + ' 条规则在用，删掉后这些规则也会一起停用（可在「自动归类规则」里看到）。'
+        : '';
+      if (!confirm('删除类别「' + x.name + '」？' + tip + '\n\n已有书签不受影响。')) return;
       const r = await chrome.runtime.sendMessage({ type: 'catDel', name: x.name });
       closeCatPop();
       if (!r || !r.ok) { $('catErr').textContent = (r && r.msg) || '删除失败'; return; }
       $('catErr').className = 'err ok';
-      $('catErr').textContent = '已删除「' + x.name + '」';
+      $('catErr').textContent = '已删除「' + x.name + '」' +
+        (r.rules ? '，同时停用 ' + r.rules + ' 条规则' : '');
       await loadCats();
       await loadFolders();
+      await loadRules();
     });
     pop.appendChild(d);
   }
 
   document.body.appendChild(pop);
-  // 定位：贴着 chip 下方；贴不下就翻到上方；左右不超出窗口
-  const r = anchor.getBoundingClientRect();
+  catPopAnchor.classList.add('on');
   pop.style.visibility = 'hidden';
   pop.classList.add('on');
-  const pw = pop.offsetWidth, ph = pop.offsetHeight;
-  let left = Math.max(8, Math.min(r.left, window.innerWidth - pw - 12));
-  let top = r.bottom + 6;
-  if (top + ph > window.innerHeight - 8) top = r.top - ph - 6;
-  pop.style.left = left + 'px';
-  pop.style.top = Math.max(8, top) + 'px';
+  placeCatPop();
   pop.style.visibility = '';
 }
 
-// 点浮层外面、按 Esc、滚动列表时都收起
+// 点浮层外面、按 Esc 收起。
+// 列表滚动不再收起浮层：滚动惯性尚未停下时点 chip，浮层会刚出现就被关掉，
+// 看起来像「点了没反应」。改为滚动时跟着 chip 重新定位，滚动停止后仍贴合。
 document.addEventListener('mousedown', e => {
   if (!catPopFor) return;
   if (e.target.id === 'catPop' || (e.target.closest && e.target.closest('#catPop'))) return;
@@ -236,7 +276,8 @@ document.addEventListener('mousedown', e => {
   closeCatPop();
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && catPopFor) closeCatPop(); });
-document.getElementById('catList').addEventListener('scroll', () => { if (catPopFor) closeCatPop(); });
+document.getElementById('catList').addEventListener('scroll', () => { if (catPopFor) placeCatPop(); }, { passive: true });
+window.addEventListener('resize', () => { if (catPopFor) placeCatPop(); });
 
 // 搜索框防抖：类别与规则都有几百条，每敲一个键就全量重建 DOM 会卡
 function debounce(fn, wait) {

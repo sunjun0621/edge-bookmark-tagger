@@ -5,7 +5,7 @@
 // 4) FOLDERS 运行时副本：启动时被 chrome.storage.local.folders 覆盖
 // 改完在 edge://extensions 点"重新加载"生效。
 
-var DOMAIN_RULES = {"stackoverflow.com":["开发","Stack Overflow","技术问答"],"youtube.com":["视频","YouTube","在线观看"],"chatgpt.com":["AI","ChatGPT","对话"],"claude.ai":["AI","Claude","对话"],"wps.cn":["办公","WPS","在线办公"],"douban.com":["阅读","豆瓣","书影音"]};
+var DOMAIN_RULES = {"stackoverflow.com":["开发","Stack Overflow","技术问答"],"youtube.com":["视频","YouTube","在线观看"],"chatgpt.com":["AI","ChatGPT","对话"]};
 
 // 内置规则的键值快照：编辑规则时用来区分「内置」与「用户新增」，也用于一键撤销
 // domainRemove / keywordRemove 由 storage.rulesPatch 恢复，决定哪些内置规则被停用

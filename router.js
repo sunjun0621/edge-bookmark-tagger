@@ -27,7 +27,8 @@ async function getPatch() {
     domainRules: p.domainRules || {},
     keywordRules: (p.keywordRules || []).slice(),
     domainRemove: (p.domainRemove || []).slice(),
-    keywordRemove: (p.keywordRemove || []).slice()
+    keywordRemove: (p.keywordRemove || []).slice(),
+    prefixRemove: Object.assign({}, p.prefixRemove || {})
   };
 }
 
@@ -35,9 +36,25 @@ async function getPatch() {
 async function savePatch(p) {
   p.domainRemove = Array.from(new Set(p.domainRemove));
   p.keywordRemove = Array.from(new Set(p.keywordRemove));
+  p.prefixRemove = p.prefixRemove || {};
   await chrome.storage.local.set({ rulesPatch: p });
   applyRulesPatch(p);
   return p;
+}
+
+// 把已删除的类别从文件夹配置里摘掉（只改内存；写盘由调用方决定）
+// 自带类别的归属存在 FOLDERS[].prefixes 里，删类别就得同时摘掉它，否则下次重建映射又活过来
+function applyPrefixRemove(map) {
+  let hit = 0;
+  for (const pfx in (map || {})) {
+    for (const f of FOLDERS) {
+      const before = f.prefixes.length;
+      f.prefixes = f.prefixes.filter(p => p !== pfx);
+      if (f.prefixes.length !== before) hit++;
+    }
+  }
+  if (hit) rebuildPrefixMap();
+  return hit;
 }
 
 // 启动：载入自定义前缀 / 文件夹配置 / 规则补丁 → 迁移旧文件夹名
@@ -49,7 +66,12 @@ let ready = (async () => {
     if (Array.isArray(s.folders) && s.folders.length) applyFolders(s.folders);
     else await saveFolders();          // 首次：把出厂四个文件夹落盘
     rebuildPrefixMap();
-    if (s.rulesPatch) applyRulesPatch(s.rulesPatch);
+    // 已删掉的类别要在这里再摘一次：storage.folders 是删之前的快照，
+    // 不重放就会被 rebuildPrefixMap 重新认成自带类别、又删不掉了
+    if (s.rulesPatch) {
+      if (applyPrefixRemove(s.rulesPatch.prefixRemove)) await saveFolders();
+      applyRulesPatch(s.rulesPatch);
+    }
     const tree = await chrome.bookmarks.getTree();
     folderCache = { at: Date.now(), map: mapFolderIdsFromTree(tree) };
     await migrateFolderNames(tree);
@@ -190,20 +212,70 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if (pfx.length > 14) { sendResponse({ ok: false, msg: '类别名最多 14 个字' }); return; }
         if (/[丨｜【】]/.test(pfx)) { sendResponse({ ok: false, msg: '类别名不能含「｜」「【】」' }); return; }
         if (!FOLDERS.some(f => f.name === folder)) { sendResponse({ ok: false, msg: '请选择要放进哪个文件夹' }); return; }
-        if (PREFIX_FOLDER[pfx]) { sendResponse({ ok: false, msg: '「' + pfx + '」是自带的类别，请用下面的「移动」改位置' }); return; }
+        if (PREFIX_FOLDER[pfx]) { sendResponse({ ok: false, msg: '「' + pfx + '」已经是类别了，要换文件夹请点它选「移动」' }); return; }
+
+        // 曾经删掉的自带类别：加回来 = 从删除表摘掉 + 把归属还回去
+        const patch = await getPatch();
+        if (patch.prefixRemove[pfx]) {
+          delete patch.prefixRemove[pfx];
+          const tf = FOLDERS.find(f => f.name === folder);
+          if (tf && !tf.prefixes.includes(pfx)) tf.prefixes.push(pfx);
+          rebuildPrefixMap();
+          await saveFolders();
+          await savePatch(patch);
+          sendResponse({ ok: true, name: pfx, folder, restored: true });
+          return;
+        }
+
         CUSTOM_PREFIX[pfx] = folder;
         await saveCustoms();
         sendResponse({ ok: true, name: pfx, folder });
         return;
       }
       // 删除类别（只从配置移除，不动已有书签）
+      // 自带的也能删：记进 prefixRemove，从文件夹配置里摘掉，并停用引用它的规则
       case 'catDel': {
         const pfx = String(msg.name || '').trim();
-        if (PREFIX_FOLDER[pfx]) { sendResponse({ ok: false, msg: '「' + pfx + '」是自带的类别，不能删除。它的规则可以在「自动归类规则」里删。' }); return; }
-        if (!(pfx in CUSTOM_PREFIX)) { sendResponse({ ok: false, msg: '找不到这个类别' }); return; }
-        delete CUSTOM_PREFIX[pfx];
-        await saveCustoms();
-        sendResponse({ ok: true, name: pfx });
+        const isBuiltin = !!PREFIX_FOLDER[pfx];
+        const isCustom = pfx in CUSTOM_PREFIX;
+        if (!isBuiltin && !isCustom) { sendResponse({ ok: false, msg: '找不到这个类别' }); return; }
+
+        // 兜底类别不能删：收藏时认不出的网页、重复链接都靠它们落位
+        if (pfx === CONST.UNKNOWN_PREFIX || pfx === CONST.DUP_PREFIX) {
+          sendResponse({ ok: false, msg: '「' + pfx + '」是兜底类别（认不出的网页、重复链接要用），不能删除' });
+          return;
+        }
+
+        const patch = await getPatch();
+        let stoppedRules = 0;
+
+        if (isBuiltin) {
+          // 1) 停用引用这个类别的规则，否则它还会被判定出来
+          for (const k in DOMAIN_RULES) {
+            if (DOMAIN_RULES[k][0] === pfx && patch.domainRemove.indexOf(k) < 0) {
+              patch.domainRemove.push(k); stoppedRules++;
+            }
+          }
+          for (const r of KEYWORD_RULES) {
+            if (r.prefix !== pfx) continue;
+            const key = r.re.source + '\u0000' + r.prefix;
+            if (patch.keywordRemove.indexOf(key) < 0) { patch.keywordRemove.push(key); stoppedRules++; }
+          }
+          // 2) 记进删除表，重启后不再复活
+          patch.prefixRemove[pfx] = 1;
+          // 3) 从文件夹配置里摘掉（自带类别的归属存在这里）
+          for (const f of FOLDERS) f.prefixes = f.prefixes.filter(p => p !== pfx);
+          rebuildPrefixMap();
+          await saveFolders();
+        }
+
+        if (isCustom) {
+          delete CUSTOM_PREFIX[pfx];
+          await saveCustoms();
+        }
+
+        await savePatch(patch);
+        sendResponse({ ok: true, name: pfx, builtin: isBuiltin, rules: stoppedRules });
         return;
       }
       // 把类别移到另一个文件夹（内置的会改文件夹配置，自己加的改映射）
@@ -378,7 +450,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         // 清空所有自定义增删，回到出厂规则（内存也立刻还原）
         await chrome.storage.local.remove('rulesPatch');
         applyRulesPatch(null);
-        sendResponse({ ok: true, msg: '已恢复初始规则，共 ' + Object.keys(DOMAIN_RULES).length + ' 条网址规则' });
+        // 删掉的类别也要回来：把出厂归属重新并回文件夹配置
+        let restored = 0;
+        for (const f of DEFAULT_FOLDERS) {
+          const tf = FOLDERS.find(x => x.name === f.name);
+          if (!tf) continue;
+          for (const p of f.prefixes) {
+            if (!tf.prefixes.includes(p)) { tf.prefixes.push(p); restored++; }
+          }
+        }
+        if (restored) { rebuildPrefixMap(); await saveFolders(); }
+        sendResponse({
+          ok: true,
+          msg: '已恢复初始规则，共 ' + Object.keys(DOMAIN_RULES).length + ' 条网址规则' +
+               (restored ? '，并恢复 ' + restored + ' 个类别' : '')
+        });
         return;
       }
 
